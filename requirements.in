@@ -1,0 +1,12 @@
+# Data handling
+pandas
+pyarrow
+
+# Hugging Face datasets (to pull the raw tickets)
+datasets
+
+# Fuzzy matching for candidate pre-filtering (from the capstone's Approach 1)
+rapidfuzz
+
+# Notebook exploration
+jupyter
