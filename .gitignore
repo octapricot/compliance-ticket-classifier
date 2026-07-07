@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Data files — versioned by DVC, never committed to Git
+data/raw/*
+data/candidates/*
+data/labeled/*
+!data/**/.gitkeep
+
+# Trained models — tracked by the model registry, not Git
+models/*
+!models/.gitkeep
