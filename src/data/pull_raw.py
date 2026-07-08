@@ -1,9 +1,14 @@
 """
 Pull a working sample of issues from the hankzhwang/issues dataset.
 
-Sources (to match the capstone's dual Jira + GitHub design):
-  - jira__mongodb__SERVER          (Jira)
-  - github__cockroachdb__cockroach (GitHub)
+Sources (Jira + multiple GitHub repos for dual-source, varied-style coverage):
+  - jira__mongodb__SERVER          (Jira)      2500
+  - github__cockroachdb__cockroach (GitHub)    2500
+  - github__etcd_io__etcd          (GitHub)    2500
+  - github__microsoft__WSL         (GitHub)    2500
+
+GitHub is over-weighted in volume because its tickets are short and often
+empty, so more are needed to surface a comparable candidate count.
 
 Output: data/raw/issues_sample.parquet
 """
@@ -13,11 +18,13 @@ import pandas as pd
 from pathlib import Path
 
 # ---- Settings ----
+# Each split: (source_label, how_many_to_pull)
 SPLITS = {
-    "jira__mongodb__SERVER": "jira",
-    "github__cockroachdb__cockroach": "github",
+    "jira__mongodb__SERVER":          ("jira", 2500),
+    "github__cockroachdb__cockroach": ("github", 2500),
+    "github__etcd_io__etcd":          ("github", 2500),
+    "github__microsoft__WSL":         ("github", 2500),
 }
-PER_SPLIT = 2500
 OUTPUT = Path("data/raw/issues_sample.parquet")
 
 KEEP = ["issue_id", "number", "title", "body", "state",
@@ -40,6 +47,7 @@ def pull_split(split_name: str, source_label: str, limit: int):
             break
         row = {col: record.get(col) for col in KEEP}
         row["source"] = source_label
+        row["repo"] = split_name          # remember the exact repo too
         rows.append(row)
     print(f"  got {len(rows)} rows")
     return rows
@@ -47,17 +55,17 @@ def pull_split(split_name: str, source_label: str, limit: int):
 
 def main():
     all_rows = []
-    for split_name, source_label in SPLITS.items():
-        all_rows.extend(pull_split(split_name, source_label, PER_SPLIT))
+    for split_name, (source_label, limit) in SPLITS.items():
+        all_rows.extend(pull_split(split_name, source_label, limit))
 
     df = pd.DataFrame(all_rows)
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUTPUT, index=False)
 
     print(f"\nSaved {len(df)} issues to {OUTPUT}")
-    print(f"Sources: {df['source'].value_counts().to_dict()}")
+    print(f"By source: {df['source'].value_counts().to_dict()}")
+    print(f"By repo:   {df['repo'].value_counts().to_dict()}")
 
-    # Force a clean shutdown so the open streaming connection doesn't linger.
     sys.exit(0)
 
 
