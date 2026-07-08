@@ -1,0 +1,5 @@
+outs:
+- md5: 54dae7bb7d5bd2a0c69ec832b782c570
+  size: 109162
+  hash: md5
+  path: synthetic.parquet
