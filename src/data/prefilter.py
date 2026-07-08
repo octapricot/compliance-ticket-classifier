@@ -9,6 +9,13 @@ A ticket becomes a candidate if it trips ANY of:
   2. a fuzzy match against a compliance phrase,
   3. a regex for incidental data exposure (IPs, emails, internal hostnames).
 
+Candidates are given a PRIORITY for labeling:
+  - "high": tripped a keyword, fuzzy match, or an internal-hostname exposure.
+            These are genuinely compliance-flavored -> label carefully.
+  - "low":  tripped ONLY a bare IP or email. In infrastructure projects these
+            are mostly network noise (traceroutes, cluster IPs, boilerplate
+            emails), but may hide a real leak -> skim these.
+
 Input:  data/raw/issues_sample.parquet
 Output: data/candidates/candidates.parquet
 """
@@ -25,13 +32,9 @@ OUTPUT = Path("data/candidates/candidates.parquet")
 # ---------------------------------------------------------------------------
 # 1. COMPLIANCE KEYWORDS (matched as whole words/phrases, case-insensitive)
 # ---------------------------------------------------------------------------
-# NOTE: The following keywords were PRUNED after a first pass because they are
-# low-signal "false friends" in software-engineering tickets:
-#   authentication, password, credentials -> connection/security plumbing,
-#       almost never a data-protection concern by themselves.
-#   tracking  -> almost always "bug tracking" / "tracking down an issue".
-#   profiling -> almost always "performance profiling", not GDPR profiling.
-# They inflated the candidate pool with noise without adding real signal.
+# PRUNED after a first pass as low-signal "false friends" in engineering
+# tickets: authentication/password/credentials (connection plumbing),
+# tracking ("bug tracking"), profiling ("performance profiling").
 PRUNED = ["authentication", "password", "credentials", "tracking", "profiling"]
 
 KEYWORDS = [
@@ -77,7 +80,15 @@ EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 HOSTNAME_RE = re.compile(r"\b[a-zA-Z0-9.-]+\.(?:internal|corp|local|intra)\.[a-zA-Z0-9.-]+\b")
 
-IP_NOISE_PREFIXES = ("127.", "0.", "10.", "192.168.", "255.", "1.1.1.1")
+# Private/localhost/test IP ranges we treat as noise (RFC1918 + loopback + link-local)
+IP_NOISE_PREFIXES = (
+    "127.", "0.", "255.", "1.1.1.1",
+    "10.",
+    "192.168.",
+    "169.254.",
+    # 172.16.x - 172.31.x are private too
+    *[f"172.{i}." for i in range(16, 32)],
+)
 
 
 def find_keyword_hits(text_lower: str):
@@ -98,6 +109,8 @@ def find_fuzzy_hits(text_lower: str):
 
 
 def find_exposure_hits(text: str):
+    """Return exposure hits split so callers can tell hostname (high-signal)
+    from bare ip/email (noisy)."""
     hits = []
     if EMAIL_RE.search(text):
         hits.append("email")
@@ -116,7 +129,8 @@ def main():
 
     df["text"] = df["title"].fillna("") + "\n\n" + df["body"].fillna("")
 
-    keyword_hits, fuzzy_hits, exposure_hits, is_candidate = [], [], [], []
+    keyword_hits, fuzzy_hits, exposure_hits = [], [], []
+    is_candidate, priority = [], []
 
     for text in df["text"]:
         text_lower = text.lower()
@@ -127,12 +141,26 @@ def main():
         keyword_hits.append(", ".join(kw))
         fuzzy_hits.append(", ".join(fz))
         exposure_hits.append(", ".join(ex))
-        is_candidate.append(bool(kw or fz or ex))
+
+        has_hostname = "hostname" in ex
+        # high-signal if any keyword, fuzzy, or an internal-hostname exposure
+        high = bool(kw or fz or has_hostname)
+        # candidate at all if anything tripped
+        cand = bool(kw or fz or ex)
+
+        is_candidate.append(cand)
+        if not cand:
+            priority.append("")          # not a candidate
+        elif high:
+            priority.append("high")
+        else:
+            priority.append("low")       # exposure-only (bare ip/email)
 
     df["keyword_hits"] = keyword_hits
     df["fuzzy_hits"] = fuzzy_hits
     df["exposure_hits"] = exposure_hits
     df["is_candidate"] = is_candidate
+    df["priority"] = priority
 
     candidates = df[df["is_candidate"]].copy()
 
@@ -141,11 +169,9 @@ def main():
 
     n, c = len(df), len(candidates)
     print(f"\nCandidates: {c} / {n}  ({100*c/n:.1f}%)")
-    print(f"  tripped a keyword:  {(df['keyword_hits'] != '').sum()}")
-    print(f"  tripped fuzzy:      {(df['fuzzy_hits'] != '').sum()}")
-    print(f"  tripped exposure:   {(df['exposure_hits'] != '').sum()}")
-    print(f"\nBy source:\n{candidates['source'].value_counts()}")
-    print(f"\nBy repo:\n{candidates['repo'].value_counts()}")
+    print(f"\nBy priority:\n{candidates['priority'].value_counts()}")
+    print(f"\nHigh-priority by source:\n{candidates[candidates['priority']=='high']['source'].value_counts()}")
+    print(f"\nHigh-priority by repo:\n{candidates[candidates['priority']=='high']['repo'].value_counts()}")
     print(f"\nSaved candidates to {OUTPUT}")
 
     sys.exit(0)

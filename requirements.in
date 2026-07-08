@@ -10,3 +10,7 @@ rapidfuzz
 
 # Notebook exploration
 jupyter
+
+# LLM API for AI-assisted labeling
+anthropic
+python-dotenv
