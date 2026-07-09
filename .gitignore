@@ -223,6 +223,6 @@ data/candidates/*
 !data/**/.gitkeep
 
 # Trained models — tracked by the model registry, not Git
-models/*
 !models/.gitkeep
 wandb/
+.DS_Store

@@ -1,0 +1,6 @@
+outs:
+- md5: b58b97a228c55f35c58631a40d0e418a.dir
+  size: 268550388
+  nfiles: 5
+  hash: md5
+  path: distilbert-compliance-final
