@@ -1,0 +1,5 @@
+outs:
+- md5: 0364b94609e6818912a174cbdde55c72
+  size: 105675
+  hash: md5
+  path: gold_v1_backup.parquet

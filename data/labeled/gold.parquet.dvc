@@ -1,5 +1,5 @@
 outs:
-- md5: 0364b94609e6818912a174cbdde55c72
-  size: 105675
+- md5: 0f5891b999ef5aa1d57046380dabdedf
+  size: 273467
   hash: md5
   path: gold.parquet

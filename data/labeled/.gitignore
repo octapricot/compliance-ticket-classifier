@@ -2,3 +2,4 @@
 /test.parquet
 /gold.parquet
 /synthetic.parquet
+/gold_v1_backup.parquet
