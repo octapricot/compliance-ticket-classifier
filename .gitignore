@@ -225,3 +225,4 @@ data/candidates/*
 # Trained models — tracked by the model registry, not Git
 models/*
 !models/.gitkeep
+wandb/

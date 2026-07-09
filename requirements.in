@@ -17,3 +17,7 @@ python-dotenv
 
 # Data version control
 dvc
+
+# Experiment tracking
+wandb
+scikit-learn
