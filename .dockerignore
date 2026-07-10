@@ -1,0 +1,10 @@
+venv/
+wandb/
+models/
+data/
+notebooks/
+.git/
+.env
+__pycache__/
+*.pyc
+.dvc/

@@ -226,3 +226,4 @@ data/candidates/*
 !models/.gitkeep
 wandb/
 .DS_Store
+models/serving_model/

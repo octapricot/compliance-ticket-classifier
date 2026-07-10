@@ -21,3 +21,9 @@ dvc
 # Experiment tracking
 wandb
 scikit-learn
+
+# Inference serving (HW3)
+fastapi
+uvicorn
+torch
+transformers
