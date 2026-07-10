@@ -27,3 +27,7 @@ fastapi
 uvicorn
 torch
 transformers
+
+# Monitoring (HW4)
+prometheus-fastapi-instrumentator
+prometheus-client
