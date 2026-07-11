@@ -1,47 +1,147 @@
-# Compliance Ticket Classifier
+# 📈 Trend Alert Service
 
-A machine-learning system that flags software-development tickets (Jira / GitHub
-issues) as **compliance-relevant** (e.g. GDPR, EU AI Act) or not.
+Сервіс для відстеження новинного хайпу та змін цін на акції компаній. Створено з метою виявлення зв’язків між новинами та динамікою фондового ринку — як, наприклад, після твіту Ілона Маска.
 
-This repository serves two courses:
-- **Deep Learning capstone** — the model itself (baseline + fine-tuned transformer)
-  and a full development cycle: data → training → evaluation.
-- **MLOps course** — the full lifecycle around that model: data labeling and
-  versioning, experiment tracking, a model registry, inference serving,
-  monitoring, and CI/CD.
+---
 
-## Problem
+## 🚀 Що вміє
 
-Development teams routinely create tickets that trigger data-protection obligations
-without using privacy keywords (e.g. "add log storage microservice" may create a
-system subject to data-protection-by-design requirements). This project trains a
-classifier to surface such tickets automatically.
+- Збір поточних цін на акції з Yahoo Finance
+- Отримання новин по компанії
+- Визначення зміни тренду (up / down / flat)
+- Нотифікації користувачів по email при зміні тренду
+- Кастомізація алертів (умови: всі, тільки зростання, тільки падіння)
+- API для взаємодії з системою (реєстрація, логін, кампанії, алерти)
+- Тестові дані через `/mock_test`
 
-## Data
+---
 
-Raw text: public Jira/GitHub issues from the Hugging Face dataset
-`hankzhwang/issues`. The dataset has no compliance labels; labeling those
-(informed by DPO domain expertise) is part of this project.
+## ⚙️ Технології
 
-## Project structure
+- **Python + Flask** – API сервер
+- **PostgreSQL** – основна база
+- **yfinance** – дані про ціни та новини
+- **smtplib** – розсилка email-повідомлень
+- **Docker-ready**
+- **pytest** – для базового тестування
 
-- `data/` - raw, candidate, and labeled datasets (DVC-tracked, not in Git)
-- `src/data/` - download, pre-filter, and export-for-labeling scripts
-- `src/train/` - baseline and transformer training
-- `src/serve/` - inference API (FastAPI)
-- `src/monitor/` - metrics and monitoring
-- `models/` - trained models (registry-tracked, not in Git)
-- `notebooks/` - exploration
-- `config/` - paths, thresholds, hyperparameters
-- `.github/workflows/` - CI/CD pipelines
-- `docs/` - per-homework write-ups and the capstone report
+---
 
-## Setup
+## 📦 Архітектура
 
-`python3 -m venv venv`
-`source venv/bin/activate`
-`pip install -r requirements.txt`
+- `app.py` — API, автентифікація, маршрути
+- `collector.py` — збір цін і новин
+- `notificator.py` — перевірка зміни тренду та розсилка
+- `models.py` — створення таблиць
+- `tests/` — базові тести REST API
 
-## Status
+---
 
-Project scaffolding complete. Data labeling in progress.
+## 📬 Як це працює
+
+1. Користувач створює акаунт та логіниться.
+2. Створює кампанію з відстеження компанії (наприклад, `TSLA`) з обраною умовою (`all`, `up`, `down`).
+3. Collector кожні 30 хвилин збирає:
+   - Поточну ціну акцій
+   - Новини, пов’язані з компанією
+4. Якщо відбувається зміна тренду (наприклад, з `up` → `down`):
+   - Notificator перевіряє відповідні алерти
+   - Якщо умова співпадає — надсилає email з деталями
+5. Для тесту можна використовувати `/mock_test` — вставляє фейкову новину і тренд
+
+## 🛠️ Приклади API
+
+### 🔐 Реєстрація
+
+```http
+POST /register
+Content-Type: application/json
+
+{
+  "username": "elon",
+  "password": "mars123",
+  "email": "elon@x.com"
+}
+```
+
+---
+
+### 🔓 Логін
+
+```http
+POST /login
+Content-Type: application/json
+
+{
+  "username": "elon",
+  "password": "mars123"
+}
+```
+
+---
+
+### 📈 Створення кампанії
+
+```http
+POST /campaigns
+Authorization: Basic base64(elon:mars123)
+Content-Type: application/json
+
+{
+  "company_id": "TSLA",
+  "alert_condition": "up"
+}
+```
+
+---
+
+### 📬 Тестова вставка (мок-дані)
+
+```http
+POST /mock_test
+Content-Type: application/json
+
+{
+  "company_id": "TSLA",
+  "trend": "up",
+  "change_percent": 5.5,
+  "email": "elon@x.com",
+  "news": [
+    { "text": "TSLA hits new high!", "url": "https://example.com/tsla" }
+  ]
+}
+```
+
+---
+
+### 📥 Отримання алертів
+
+```http
+GET /alerts
+Authorization: Basic base64(elon:mars123)
+```
+
+---
+
+### 🔄 Зміна умови алерта
+
+```http
+PATCH /alerts/7
+Authorization: Basic base64(elon:mars123)
+Content-Type: application/json
+
+{
+  "alert_condition": "down"
+}
+```
+
+---
+
+## 📄 Таблиці в базі даних
+
+- **users** – користувачі  
+- **campaigns** – кампанії по компаніях  
+- **alerts** – алерти, прив'язані до тікерах  
+- **prices** – історія цін акцій  
+- **news_data** – новини, що стосуються компаній  
+- **notifications** – лог надісланих алертів  
