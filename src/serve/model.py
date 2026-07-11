@@ -14,7 +14,8 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 load_dotenv()  # loads WANDB_API_KEY
 
 # W&B artifact reference: <entity>/<project>/<artifact_name>:<version>
-WANDB_ARTIFACT = "k-dubas-set-university/compliance-ticket-classifier/distilbert-compliance:latest"
+# Pull from the W&B MODEL REGISTRY, not from a raw project artifact.
+WANDB_ARTIFACT = "k-dubas-set-university-org/wandb-registry-model/compliance-classifier:production"
 LOCAL_MODEL_DIR = Path("models/serving_model")
 LABELS = {0: "not_relevant", 1: "relevant"}
 MAX_LEN = 256
