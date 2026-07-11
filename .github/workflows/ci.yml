@@ -53,6 +53,18 @@ jobs:
           pip install dvc[s3] pandas scikit-learn wandb python-dotenv joblib pyarrow
 
       # DVC needs S3 credentials to fetch the dataset.
+      - name: Check secrets are present
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          echo "Key ID length:  ${#AWS_ACCESS_KEY_ID}"
+          echo "Secret length:  ${#AWS_SECRET_ACCESS_KEY}"
+          if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "AWS_ACCESS_KEY_ID is EMPTY - the secret is missing or misnamed"
+            exit 1
+          fi
+          echo "Both secrets are non-empty"
       - name: Pull dataset from S3 (DVC)
         env:
           AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
