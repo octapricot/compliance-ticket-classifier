@@ -1,75 +1,140 @@
 name: CI/CD Pipeline
 
-# Run on every push to main, and on pull requests targeting main.
+# ---------------------------------------------------------------
+# TRIGGERS
+#   push to main        - continuous integration on every merge
+#   pull_request        - validate before merging
+#   workflow_dispatch   - manual run from the Actions tab (on demand)
+#   schedule            - weekly retrain, Mondays 06:00 UTC
+# ---------------------------------------------------------------
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+
+  # ============ 1. LINT ============
   lint:
     name: Lint code
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check src/ || true   # report, don't block on style
 
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Run ruff (lint check)
-        run: ruff check src/ || true   # report issues but don't fail the build on style
-
-  build-and-smoke-test:
-    name: Build image and smoke-test the service
+  # ============ 2. TRAIN ============
+  # Pulls the versioned dataset from S3 (DVC), retrains the baseline,
+  # logs metrics to W&B and uploads the model as a versioned artifact.
+  train:
+    name: Train model
     runs-on: ubuntu-latest
-    needs: lint          # only runs if lint job completes
+    needs: lint
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t compliance-classifier .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Run container
+      - name: Install dependencies
+        run: |
+          pip install dvc[s3] pandas scikit-learn wandb python-dotenv joblib pyarrow
+
+      # DVC needs S3 credentials to fetch the dataset.
+      - name: Pull dataset from S3 (DVC)
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          dvc pull data/labeled/train.parquet data/labeled/test.parquet -v
+          ls -la data/labeled/
+
+      - name: Train baseline + log to W&B
+        env:
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        run: python src/train/train_baseline.py
+
+  # ============ 3. DEPLOY ============
+  # Builds the inference image, smoke-tests it, and publishes it to
+  # GitHub Container Registry (GHCR) tagged with the commit SHA + latest.
+  deploy:
+    name: Build, test and publish image
+    runs-on: ubuntu-latest
+    needs: train           # only deploy if training succeeded
+    permissions:
+      contents: read
+      packages: write      # required to push to GHCR
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # provided automatically
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build image (load locally for smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: compliance-classifier:test
+
+      - name: Smoke test the service
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
         run: |
-          docker run -d --name classifier \
-            -p 8000:8000 \
-            -e WANDB_API_KEY="$WANDB_API_KEY" \
-            compliance-classifier
-
-      - name: Wait for the service to be ready
-        run: |
-          echo "Waiting for service to start (it pulls the model from W&B)..."
+          docker run -d --name classifier -p 8000:8000 \
+            -e WANDB_API_KEY="$WANDB_API_KEY" compliance-classifier:test
+          echo "Waiting for the service (it pulls the model from W&B)..."
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8000/health > /dev/null; then
-              echo "Service is up!"
-              exit 0
+              echo "Service is up."
+              break
             fi
-            echo "  attempt $i/30 - not ready yet, waiting 10s..."
+            if [ "$i" -eq 30 ]; then
+              echo "Service did not become healthy."
+              docker logs classifier
+              exit 1
+            fi
             sleep 10
           done
-          echo "Service did not become healthy in time."
-          docker logs classifier
-          exit 1
-
-      - name: Smoke test /health
-        run: |
-          response=$(curl -s http://localhost:8000/health)
-          echo "Health response: $response"
-          echo "$response" | grep -q "ok" && echo "PASS" || (echo "FAIL" && exit 1)
-
-      - name: Smoke test /predict
-        run: |
-          curl -s -X POST http://localhost:8000/predict \
+          echo "--- /predict ---"
+          curl -sf -X POST http://localhost:8000/predict \
             -H "Content-Type: application/json" \
-            -d '{"text": "Add user data deletion endpoint for GDPR"}'
+            -d '{"text": "Add user data deletion endpoint for GDPR"}' | tee /tmp/pred.json
+          grep -q "label" /tmp/pred.json
+
+      - name: Publish image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Clean up
         if: always()

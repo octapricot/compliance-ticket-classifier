@@ -31,3 +31,4 @@ transformers
 # Monitoring (HW4)
 prometheus-fastapi-instrumentator
 prometheus-client
+joblib

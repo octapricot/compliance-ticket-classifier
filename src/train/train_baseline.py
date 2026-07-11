@@ -15,6 +15,8 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
+import joblib
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -117,6 +119,21 @@ def main():
     print("\nTop words -> NOT relevant:")
     for c, w in top_neg:
         print(f"  {c:+.2f}  {w}")
+
+    model_dir = Path("models")
+    model_dir.mkdir(exist_ok=True)
+    model_path = model_dir / "baseline-tfidf-logreg.joblib"
+    joblib.dump(pipe, model_path)
+
+    artifact = wandb.Artifact(
+        name="baseline-tfidf-logreg",
+        type="model",
+        description="TF-IDF + LogisticRegression compliance classifier",
+        metadata={"accuracy": acc, "precision": prec, "recall": rec, "f1": f1},
+    )
+    artifact.add_file(str(model_path))
+    run.log_artifact(artifact)
+    print(f"Model saved to {model_path} and logged to W&B as an artifact.")
 
     run.finish()
     print("\nLogged to W&B. Baseline done.")
