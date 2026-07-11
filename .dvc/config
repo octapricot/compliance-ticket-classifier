@@ -1,0 +1,5 @@
+[core]
+    remote = storage
+['remote "storage"']
+    url = s3://mlops-compliance-classifier-kdubas/dvcstore
+    region = eu-central-1
