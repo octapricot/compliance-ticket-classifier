@@ -18,6 +18,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.serve.model import load_model, predict
 
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 
 # Custom metric: count predictions by their resulting label.
 # A Counter only goes up; Prometheus computes rates from it over time.
@@ -27,6 +30,28 @@ PREDICTIONS = Counter(
     ["label"],
 )
 
+# Every prediction is appended here as one JSON object per line (JSONL).
+# This is the "current" data that drift detection compares against the
+# training set. Without it, we could not tell whether live traffic has
+# drifted away from what the model was trained on.
+PREDICTION_LOG = Path("data/monitoring/predictions.jsonl")
+
+def log_prediction(text: str, result: dict):
+    """Append one prediction to the log. Never breaks the request."""
+    try:
+        PREDICTION_LOG.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "text": text,
+            "label": result["label"],
+            "confidence": result["confidence"],
+            "prob_relevant": result["probabilities"]["relevant"],
+        }
+        with PREDICTION_LOG.open("a") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as e:
+        # Logging must never take down the service.
+        print(f"[warn] failed to log prediction: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,6 +78,6 @@ def health():
 @app.post("/predict")
 def classify(ticket: TicketIn):
     result = predict(ticket.text)
-    # Increment the counter for whichever label was predicted.
     PREDICTIONS.labels(label=result["label"]).inc()
+    log_prediction(ticket.text, result)
     return result

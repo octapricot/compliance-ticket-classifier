@@ -227,3 +227,4 @@ data/candidates/*
 wandb/
 .DS_Store
 models/serving_model/
+data/monitoring/

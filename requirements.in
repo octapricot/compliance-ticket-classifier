@@ -32,3 +32,4 @@ transformers
 prometheus-fastapi-instrumentator
 prometheus-client
 joblib
+evidently
