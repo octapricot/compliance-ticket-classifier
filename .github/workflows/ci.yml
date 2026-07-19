@@ -13,8 +13,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * 1"
+  # schedule:
+  #  - cron: "0 6 * * 1" # disabled after course completion
 
 env:
   REGISTRY: ghcr.io
